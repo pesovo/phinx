@@ -36,8 +36,8 @@ use Phinx\Migration\MigrationInterface;
 
 class PostgresAdapter extends PdoAdapter implements AdapterInterface
 {
-    const INT_SMALL = 65535;
 
+    const INT_SMALL   = 65535;
     /**
      * Columns with comments
      *
@@ -136,7 +136,7 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
      */
     public function quoteTableName($tableName)
     {
-        return $this->quoteSchemaName($this->getSchemaName()) . '.' . $this->quoteColumnName($tableName);
+        return $this->quoteSchemaName(self::getMkartaSchemaName($tableName)) . '.' . $this->quoteColumnName(self::getMkartaTableName($tableName));
     }
 
     /**
@@ -152,14 +152,15 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
      */
     public function hasTable($tableName)
     {
+
         $result = $this->getConnection()->query(
             sprintf(
                 'SELECT *
                 FROM information_schema.tables
                 WHERE table_schema = %s
                 AND lower(table_name) = lower(%s)',
-                $this->getConnection()->quote($this->getSchemaName()),
-                $this->getConnection()->quote($tableName)
+                $this->getConnection()->quote(self::getMkartaSchemaName($tableName)),
+                $this->getConnection()->quote(self::getMkartaTableName($tableName))
             )
         );
 
@@ -213,7 +214,7 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
          // set the primary key(s)
         if (isset($options['primary_key'])) {
             $sql = rtrim($sql);
-            $sql .= sprintf(' CONSTRAINT %s_pkey PRIMARY KEY (', $table->getName());
+            $sql .= sprintf(' CONSTRAINT %s_pkey PRIMARY KEY (', self::getMkartaTableName($table->getName()));
             if (is_string($options['primary_key'])) {       // handle primary_key => 'id'
                 $sql .= $this->quoteColumnName($options['primary_key']);
             } elseif (is_array($options['primary_key'])) { // handle primary_key => array('tag_id', 'resource_id')
@@ -312,9 +313,9 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
             $column = new Column();
             $column->setName($columnInfo['column_name'])
                    ->setType($this->getPhinxType($columnInfo['data_type']))
-                   ->setNull($columnInfo['is_nullable'] === 'YES')
+                   ->setNull($columnInfo['is_nullable'] == 'YES')
                    ->setDefault($columnInfo['column_default'])
-                   ->setIdentity($columnInfo['is_identity'] === 'YES')
+                   ->setIdentity($columnInfo['is_identity'] == 'YES')
                    ->setPrecision($columnInfo['numeric_precision'])
                    ->setScale($columnInfo['numeric_scale']);
 
@@ -541,20 +542,6 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
         return false;
     }
 
-     /**
-      * {@inheritdoc}
-      */
-     public function hasIndexByName($tableName, $indexName)
-     {
-         $indexes = $this->getIndexes($tableName);
-         foreach ($indexes as $name => $index) {
-             if ($name === $indexName) {
-                 return true;
-             }
-         }
-         return false;
-     }
-
     /**
      * {@inheritdoc}
      */
@@ -760,7 +747,6 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
             case static::PHINX_TYPE_DATETIME:
             case static::PHINX_TYPE_TIMESTAMP:
                 return array('name' => 'timestamp');
-            case static::PHINX_TYPE_BLOB:
             case static::PHINX_TYPE_BINARY:
                 return array('name' => 'bytea');
             // Geospatial database types
@@ -918,7 +904,7 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
             $sqlType = $this->getSqlType($column->getType(), $column->getLimit());
             $buffer[] = strtoupper($sqlType['name']);
             // integers cant have limits in postgres
-            if (static::PHINX_TYPE_DECIMAL === $sqlType['name'] && ($column->getPrecision() || $column->getScale())) {
+            if (static::PHINX_TYPE_DECIMAL == $sqlType['name'] && ($column->getPrecision() || $column->getScale())) {
                 $buffer[] = sprintf(
                     '(%s, %s)',
                     $column->getPrecision() ? $column->getPrecision() : $sqlType['precision'],
@@ -990,7 +976,7 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
         }
         $def = sprintf(
             "CREATE %s INDEX %s ON %s (%s);",
-            ($index->getType() === Index::UNIQUE ? 'UNIQUE' : ''),
+            ($index->getType() == Index::UNIQUE ? 'UNIQUE' : ''),
             $indexName,
             $this->quoteTableName($tableName),
             implode(',', $index->getColumns())
@@ -1186,5 +1172,27 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
     {
         $options = $this->getOptions();
         return empty($options['schema']) ? 'public' : $options['schema'];
+    }
+
+    public function getVersions()
+    {
+        $this->fetchAll(sprintf('SET search_path TO %s', $this->getSchemaName()));
+
+        return parent::getVersions();
+    }
+
+    private function getMkartaSchemaName($tableName){
+        $schema = $this->getSchemaName();
+        if(strpos($tableName, '.') !== FALSE){
+            $schema = substr($tableName, 0, strpos($tableName, '.'));
+        }
+        return $schema;
+    }
+
+    private function getMkartaTableName($tableName){
+        if(strpos($tableName, '.') !== FALSE){
+            $tableName = substr($tableName, strpos($tableName, '.') + 1, strlen($tableName));
+        }
+        return $tableName;
     }
 }

@@ -1181,6 +1181,11 @@ class PostgresAdapter extends PdoAdapter implements AdapterInterface
         return parent::getVersions();
     }
 
+    // TODO
+    public function hasIndexByName($tableName, $indexName){
+        return false;
+    }
+
     private function getMkartaSchemaName($tableName){
         $schema = $this->getSchemaName();
         if(strpos($tableName, '.') !== FALSE){
